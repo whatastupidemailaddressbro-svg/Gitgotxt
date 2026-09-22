@@ -1,16 +1,18 @@
 import React, { useState } from "react";
-import { Copy, Check, FileText, Download, Code2, Search, ArrowDown } from "lucide-react";
+import { Copy, Check, FileText, Download, Code2, CloudUpload } from "lucide-react";
 
 interface ContainerViewerProps {
   containerText: string;
   onCopy: () => void;
   onDownloadTxt: () => void;
+  onOpenSaveModal?: () => void;
 }
 
 export const ContainerViewer: React.FC<ContainerViewerProps> = ({
   containerText,
   onCopy,
   onDownloadTxt,
+  onOpenSaveModal,
 }) => {
   const [copied, setCopied] = useState(false);
   const [search, setSearch] = useState("");
@@ -40,6 +42,18 @@ export const ContainerViewer: React.FC<ContainerViewerProps> = ({
         </div>
 
         <div className="flex items-center space-x-2">
+          {onOpenSaveModal && (
+            <button
+              id="btn-viewer-save-cloud"
+              type="button"
+              onClick={onOpenSaveModal}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-zinc-950 flex items-center space-x-1.5 transition-colors cursor-pointer"
+            >
+              <CloudUpload className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>Save to Drive/Docs/Mail</span>
+            </button>
+          )}
+
           <button
             id="btn-viewer-copy"
             type="button"
@@ -67,7 +81,7 @@ export const ContainerViewer: React.FC<ContainerViewerProps> = ({
             id="btn-viewer-download"
             type="button"
             onClick={onDownloadTxt}
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-zinc-950 flex items-center space-x-1.5 transition-colors cursor-pointer"
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 flex items-center space-x-1.5 transition-colors cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 stroke-[2.5]" />
             <span>Save .txt</span>

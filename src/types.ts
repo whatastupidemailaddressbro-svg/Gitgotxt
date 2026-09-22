@@ -50,3 +50,15 @@ export interface UnpackedFile {
   size: number;
   lines: number;
 }
+
+export interface PackingProgress {
+  active: boolean;
+  percent: number;
+  title: string;
+  step: number;
+  totalSteps: number;
+  detail: string;
+  sourceType?: "github" | "local" | "drive";
+  repoName?: string;
+  elapsedSeconds?: number;
+}

@@ -58,6 +58,21 @@ app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+// Standard email preview helper endpoint
+app.post("/api/save/email-preview", (req, res) => {
+  const { toEmail, subject, summary } = req.body || {};
+  const mailtoUrl = `mailto:${encodeURIComponent(toEmail || "")}?subject=${encodeURIComponent(
+    subject || "RepoPack Text Container"
+  )}&body=${encodeURIComponent(summary || "")}`;
+
+  res.json({
+    success: true,
+    recipient: toEmail || "",
+    subject: subject || "RepoPack Text Container",
+    mailtoUrl,
+  });
+});
+
 // Serve offline standalone tools directory
 app.use("/offline", express.static(path.join(process.cwd(), "offline")));
 
@@ -94,7 +109,11 @@ function parseGithubUrl(rawInput: string) {
 // Endpoint to fetch and inspect repository details before or during packing
 app.post("/api/fetch-repo", async (req, res) => {
   try {
-    const { url, branch: customBranch, options = {} } = req.body;
+    const { url, branch: customBranch, githubToken: bodyToken, options = {} } = req.body;
+    // Also accept Authorization header if sent
+    const authHeader = req.headers.authorization;
+    const githubToken = bodyToken || (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : authHeader);
+
     if (!url) {
       return res.status(400).json({ error: "Repository URL is required" });
     }
@@ -103,35 +122,58 @@ app.post("/api/fetch-repo", async (req, res) => {
     const targetBranch = customBranch || urlBranch;
 
     // Fetch archive from GitHub
-    // Try download URLs:
-    // 1. codeload.github.com/{owner}/{repo}/zip/refs/heads/{branch} or zipball API
+    // When an authenticated token is present, we prioritize the GitHub API zipball endpoint
     const candidateUrls: string[] = [];
-    if (targetBranch) {
-      candidateUrls.push(
-        `https://codeload.github.com/${owner}/${repo}/zip/refs/heads/${targetBranch}`,
-        `https://codeload.github.com/${owner}/${repo}/zip/refs/tags/${targetBranch}`,
-        `https://api.github.com/repos/${owner}/${repo}/zipball/${targetBranch}`
-      );
+    if (githubToken && githubToken.trim()) {
+      if (targetBranch) {
+        candidateUrls.push(
+          `https://api.github.com/repos/${owner}/${repo}/zipball/${encodeURIComponent(targetBranch)}`,
+          `https://codeload.github.com/${owner}/${repo}/zip/refs/heads/${encodeURIComponent(targetBranch)}`
+        );
+      } else {
+        candidateUrls.push(
+          `https://api.github.com/repos/${owner}/${repo}/zipball`,
+          `https://codeload.github.com/${owner}/${repo}/zip/refs/heads/main`,
+          `https://codeload.github.com/${owner}/${repo}/zip/refs/heads/master`
+        );
+      }
     } else {
-      // Default branch: try main, master, or default zipball redirect
-      candidateUrls.push(
-        `https://api.github.com/repos/${owner}/${repo}/zipball`,
-        `https://codeload.github.com/${owner}/${repo}/zip/refs/heads/main`,
-        `https://codeload.github.com/${owner}/${repo}/zip/refs/heads/master`
-      );
+      if (targetBranch) {
+        candidateUrls.push(
+          `https://codeload.github.com/${owner}/${repo}/zip/refs/heads/${targetBranch}`,
+          `https://codeload.github.com/${owner}/${repo}/zip/refs/tags/${targetBranch}`,
+          `https://api.github.com/repos/${owner}/${repo}/zipball/${targetBranch}`
+        );
+      } else {
+        // Default branch: try API zipball redirect or main/master
+        candidateUrls.push(
+          `https://api.github.com/repos/${owner}/${repo}/zipball`,
+          `https://codeload.github.com/${owner}/${repo}/zip/refs/heads/main`,
+          `https://codeload.github.com/${owner}/${repo}/zip/refs/heads/master`
+        );
+      }
     }
 
     let zipBuffer: Buffer | null = null;
     let fetchError = "";
 
+    const requestHeaders: Record<string, string> = {
+      "User-Agent": "RepoPack-Container-Tool",
+      Accept: "application/vnd.github.v3+json, application/zip, */*",
+    };
+
+    if (githubToken && githubToken.trim()) {
+      const cleanToken = githubToken.trim();
+      requestHeaders["Authorization"] = cleanToken.startsWith("Bearer ") || cleanToken.startsWith("token ")
+        ? cleanToken
+        : `Bearer ${cleanToken}`;
+    }
+
     for (const downloadUrl of candidateUrls) {
       try {
         const response = await fetch(downloadUrl, {
-          headers: {
-            "User-Agent": "RepoPack-Container-Tool",
-            Accept: "application/vnd.github.v3+json, application/zip, */*"
-          },
-          redirect: "follow"
+          headers: requestHeaders,
+          redirect: "follow",
         });
 
         if (response.ok) {
@@ -139,7 +181,17 @@ app.post("/api/fetch-repo", async (req, res) => {
           zipBuffer = Buffer.from(arrayBuf);
           break;
         } else {
-          fetchError = `GitHub responded with status ${response.status}: ${response.statusText}`;
+          let extraHelp = "";
+          if (response.status === 404) {
+            extraHelp = githubToken
+              ? " (Repository not found or token lacks 'repo' permission for private repos)"
+              : " (Repository not found or is private. Provide a GitHub token to pull private repos)";
+          } else if (response.status === 401) {
+            extraHelp = " (GitHub token is invalid or expired)";
+          } else if (response.status === 403) {
+            extraHelp = " (GitHub API rate limit exceeded or access forbidden. Check token permissions)";
+          }
+          fetchError = `GitHub responded with status ${response.status}: ${response.statusText}${extraHelp}`;
         }
       } catch (err: any) {
         fetchError = err.message || String(err);

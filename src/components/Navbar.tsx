@@ -1,16 +1,26 @@
 import React from "react";
 import { FolderArchive, Terminal, Download, Laptop } from "lucide-react";
+import { User } from "firebase/auth";
+import { GoogleAuthButton } from "./GoogleAuthButton";
 
 interface NavbarProps {
   onOpenHowItWorks: () => void;
   activeTab: "pack" | "unpack";
   setActiveTab: (tab: "pack" | "unpack") => void;
+  user: User | null;
+  isGoogleLoading: boolean;
+  onSignIn: () => void;
+  onSignOut: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   onOpenHowItWorks,
   activeTab,
   setActiveTab,
+  user,
+  isGoogleLoading,
+  onSignIn,
+  onSignOut,
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-zinc-900/90 backdrop-blur-md border-b border-zinc-800 text-zinc-100">
@@ -58,15 +68,22 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
 
-        {/* Offline Editions & Guide buttons */}
+        {/* Google Auth, Offline Editions & Guide buttons */}
         <div className="flex items-center space-x-2">
+          <GoogleAuthButton
+            user={user}
+            isLoading={isGoogleLoading}
+            onSignIn={onSignIn}
+            onSignOut={onSignOut}
+          />
+
           <a
             id="btn-offline-html"
             href="/offline/index.html"
             target="_blank"
             rel="noopener noreferrer"
             title="Open Standalone Offline HTML Version (with persistent storage & auto-download)"
-            className="hidden md:flex items-center space-x-1.5 text-xs font-medium text-emerald-400 hover:text-emerald-300 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/20 transition-all"
+            className="hidden lg:flex items-center space-x-1.5 text-xs font-medium text-emerald-400 hover:text-emerald-300 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/20 transition-all"
           >
             <Laptop className="w-3.5 h-3.5" />
             <span>Offline HTML</span>
@@ -77,19 +94,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             href="/offline/repopack.py"
             download="repopack.py"
             title="Download Standalone Python CLI Script (with interactive menu)"
-            className="hidden md:flex items-center space-x-1.5 text-xs font-medium text-cyan-400 hover:text-cyan-300 px-2.5 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/15 border border-cyan-500/20 transition-all"
+            className="hidden lg:flex items-center space-x-1.5 text-xs font-medium text-cyan-400 hover:text-cyan-300 px-2.5 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/15 border border-cyan-500/20 transition-all"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Python Menu Script</span>
+            <span>Python Menu</span>
           </a>
 
           <button
             id="btn-how-it-works"
             onClick={onOpenHowItWorks}
-            className="flex items-center space-x-1.5 text-xs font-medium text-zinc-300 hover:text-white px-3 py-1.5 rounded-lg bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700/70 transition-all cursor-pointer"
+            className="flex items-center space-x-1.5 text-xs font-medium text-zinc-300 hover:text-white px-2.5 py-1.5 rounded-lg bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700/70 transition-all cursor-pointer"
           >
             <Terminal className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Unpack Guide</span>
+            <span className="hidden sm:inline">Unpack Guide</span>
           </button>
         </div>
       </div>

@@ -442,8 +442,8 @@ def workflow_pack_zip(zip_path: str, config: PackConfig):
         print(f"[-] Failed to process ZIP archive: {e}")
 
 
-def workflow_pack_github(github_input: str, config: PackConfig):
-    """Fetches a public GitHub repository directly and packs it."""
+def workflow_pack_github(github_input: str, config: PackConfig, token: str = None):
+    """Fetches a public or private GitHub repository directly and packs it."""
     cleaned = github_input.strip()
     cleaned = re.sub(r"^https?://github\.com/", "", cleaned)
     cleaned = re.sub(r"^git@github\.com:", "", cleaned)
@@ -461,8 +461,12 @@ def workflow_pack_github(github_input: str, config: PackConfig):
     if len(parts) >= 4 and parts[2] in ("tree", "blob"):
         branch = parts[3]
 
+    effective_token = token or os.environ.get("GITHUB_TOKEN")
+
     repo_name = f"{owner}_{repo}"
-    print(f"\n[*] Fetching public GitHub repository: {owner}/{repo} (branch: {branch})...")
+    print(f"\n[*] Fetching GitHub repository: {owner}/{repo} (branch: {branch})...")
+    if effective_token:
+        print("    [!] Authenticated GitHub Token detected (private repos enabled)")
 
     # Try downloading the repository archive from GitHub
     archive_urls = [
@@ -474,12 +478,20 @@ def workflow_pack_github(github_input: str, config: PackConfig):
     downloaded = False
     temp_zip = None
 
+    headers = {
+        "User-Agent": "RepoPack-CLI/1.0",
+        "Accept": "application/vnd.github.v3+json, application/zip"
+    }
+    if effective_token:
+        t = effective_token.strip()
+        headers["Authorization"] = t if (t.startswith("Bearer ") or t.startswith("token ")) else f"Bearer {t}"
+
     for url in archive_urls:
         try:
             print(f"  -> Attempting download from: {url}")
             req = urllib.request.Request(
                 url,
-                headers={"User-Agent": "RepoPack-CLI/1.0", "Accept": "application/vnd.github.v3+json"}
+                headers=headers
             )
             with urllib.request.urlopen(req, timeout=30) as resp:
                 data = resp.read()
@@ -491,13 +503,18 @@ def workflow_pack_github(github_input: str, config: PackConfig):
                 print(f"  [+] Downloaded archive: {len(data) / 1024:.1f} KB")
                 break
         except urllib.error.HTTPError as he:
-            print(f"  [-] HTTP {he.code}: {he.reason}")
+            note = ""
+            if he.code == 404:
+                note = " (repo not found or private; provide token with 'repo' scope)"
+            elif he.code == 401:
+                note = " (invalid or expired token)"
+            print(f"  [-] HTTP {he.code}: {he.reason}{note}")
         except Exception as ex:
             print(f"  [-] Error: {ex}")
 
     if not downloaded or not temp_zip:
         print(f"[-] Could not download repository archive for {owner}/{repo}.")
-        print("    Check your network connection or verify that the repository is public.")
+        print("    Check your network, or if private, set GITHUB_TOKEN or pass a token with 'repo' scope.")
         return
 
     try:
@@ -592,7 +609,13 @@ def run_interactive_menu():
         elif choice == "3":
             gh_url = input("\n Enter GitHub URL or owner/repo (e.g. expressjs/express): ").strip()
             if gh_url:
-                workflow_pack_github(gh_url, config)
+                env_tok = os.environ.get("GITHUB_TOKEN")
+                tok = ""
+                if env_tok:
+                    print(f" [*] Using GITHUB_TOKEN from environment.")
+                else:
+                    tok = input(" Enter GitHub token for private repo (optional, press Enter to skip): ").strip()
+                workflow_pack_github(gh_url, config, token=tok or None)
             else:
                 print("[-] No GitHub repository specified.")
 

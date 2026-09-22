@@ -9,6 +9,7 @@ import {
   Cpu,
   Layers,
   FileCheck,
+  CloudUpload,
 } from "lucide-react";
 import { PackStats } from "../types";
 
@@ -18,6 +19,7 @@ interface StatsOverviewProps {
   onCopy: () => void;
   onDownloadTxt: () => void;
   onDownloadScript: (type: "py" | "sh") => void;
+  onOpenSaveModal: () => void;
 }
 
 export const StatsOverview: React.FC<StatsOverviewProps> = ({
@@ -26,6 +28,7 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
   onCopy,
   onDownloadTxt,
   onDownloadScript,
+  onOpenSaveModal,
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -119,13 +122,23 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
           </button>
 
           <button
+            id="btn-open-save-modal"
+            type="button"
+            onClick={onOpenSaveModal}
+            className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-zinc-950 font-bold text-xs transition-all shadow-md shadow-emerald-500/20 cursor-pointer"
+          >
+            <CloudUpload className="w-4 h-4 stroke-[2.5]" />
+            <span>Save to Drive, Docs & Mail</span>
+          </button>
+
+          <button
             id="btn-download-txt"
             type="button"
             onClick={onDownloadTxt}
-            className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold text-xs transition-all shadow-md shadow-emerald-500/10 cursor-pointer"
+            className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700 font-semibold text-xs transition-all shadow-md cursor-pointer"
           >
-            <Download className="w-4 h-4 stroke-[2.5]" />
-            <span>Download .txt Container</span>
+            <Download className="w-4 h-4 stroke-[2.5] text-emerald-400" />
+            <span>Download .txt</span>
           </button>
 
           <div className="flex items-center space-x-1">

@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useMemo, useEffect } from "react";
+import { User } from "firebase/auth";
 import { Navbar } from "./components/Navbar";
 import { RepoInput } from "./components/RepoInput";
 import { FilterSettings } from "./components/FilterSettings";
@@ -13,9 +14,12 @@ import { ContainerViewer } from "./components/ContainerViewer";
 import { UnpackView } from "./components/UnpackView";
 import { HowItWorksModal } from "./components/HowItWorksModal";
 import { FilePreviewModal } from "./components/FilePreviewModal";
-import { RepoFile, RepoMeta, PackConfig } from "./types";
+import { SaveDestinationModal } from "./components/SaveDestinationModal";
+import { PackingProgressBar } from "./components/PackingProgressBar";
+import { RepoFile, RepoMeta, PackConfig, PackingProgress } from "./types";
 import { buildTextContainer } from "./utils/packer";
 import { processZipFile } from "./utils/localPacker";
+import { initAuth, googleSignIn, googleSignOut, getAccessToken } from "./services/firebaseAuth";
 import { Sparkles, Terminal, FileCode2, Layers } from "lucide-react";
 
 export default function App() {
@@ -27,6 +31,59 @@ export default function App() {
   const [activeView, setActiveView] = useState<"output" | "files">("output");
   const [previewFile, setPreviewFile] = useState<RepoFile | null>(null);
   const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(false);
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+
+  // Active Packing Progress Bar State
+  const [packingProgress, setPackingProgress] = useState<PackingProgress>({
+    active: false,
+    percent: 0,
+    title: "",
+    step: 1,
+    totalSteps: 5,
+    detail: "",
+  });
+
+  // Google Workspace Authentication State
+  const [user, setUser] = useState<User | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = initAuth(
+      (currentUser, token) => {
+        setUser(currentUser);
+        setAccessToken(token);
+      },
+      () => {
+        setUser(null);
+        setAccessToken(null);
+      }
+    );
+    return () => {
+      if (typeof unsubscribe === "function") unsubscribe();
+    };
+  }, []);
+
+  const handleGoogleSignIn = async () => {
+    setIsGoogleLoading(true);
+    try {
+      const res = await googleSignIn();
+      if (res) {
+        setUser(res.user);
+        setAccessToken(res.accessToken);
+      }
+    } catch (err) {
+      console.error("Google sign in failed:", err);
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
+  const handleGoogleSignOut = async () => {
+    await googleSignOut();
+    setUser(null);
+    setAccessToken(null);
+  };
 
   // Configuration options
   const [config, setConfig] = useState<PackConfig>({
@@ -50,9 +107,65 @@ export default function App() {
   }, [files, repoMeta, config.unpackerScriptType]);
 
   // Fetch repository from GitHub backend
-  const handleFetchRepo = async (url: string, branch?: string) => {
+  const handleFetchRepo = async (url: string, branch?: string, githubToken?: string) => {
     setIsLoading(true);
     setError(null);
+
+    const initialRepoName = url.replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "");
+    setPackingProgress({
+      active: true,
+      percent: 15,
+      title: "Connecting to GitHub",
+      step: 1,
+      totalSteps: 5,
+      detail: `Resolving repository archive for '${initialRepoName}'...`,
+      sourceType: "github",
+      repoName: initialRepoName,
+    });
+
+    // Staged progression indicators while downloading and processing
+    const t1 = setTimeout(() => {
+      setPackingProgress((prev) => ({
+        ...prev,
+        percent: 36,
+        step: 2,
+        title: "Downloading Repository Archive",
+        detail: "Retrieving repository zipball archive from GitHub...",
+      }));
+    }, 700);
+
+    const t2 = setTimeout(() => {
+      setPackingProgress((prev) => ({
+        ...prev,
+        percent: 60,
+        step: 3,
+        title: "Decompressing & Scanning Tree",
+        detail: "Unpacking archive files and cataloging hierarchy...",
+      }));
+    }, 1800);
+
+    const t3 = setTimeout(() => {
+      setPackingProgress((prev) => ({
+        ...prev,
+        percent: 80,
+        step: 4,
+        title: "Applying Stripping & Filtering Rules",
+        detail: "Excluding dotfiles, binaries, vendor modules, and lockfiles...",
+      }));
+    }, 3000);
+
+    const t4 = setTimeout(() => {
+      setPackingProgress((prev) => ({
+        ...prev,
+        percent: 94,
+        step: 5,
+        title: "Assembling Text Container",
+        detail: "Building line-for-line file blocks, ASCII tree, and unpacker...",
+      }));
+    }, 4500);
+
+    // If no explicit token passed, check local storage
+    const effectiveToken = githubToken || (typeof localStorage !== "undefined" ? localStorage.getItem("repopack_github_token") || undefined : undefined);
 
     try {
       const response = await fetch("/api/fetch-repo", {
@@ -61,6 +174,7 @@ export default function App() {
         body: JSON.stringify({
           url,
           branch,
+          githubToken: effectiveToken,
           options: config,
         }),
       });
@@ -71,10 +185,35 @@ export default function App() {
         throw new Error(data.error || "Failed to fetch repository");
       }
 
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      clearTimeout(t4);
+
+      setPackingProgress({
+        active: true,
+        percent: 100,
+        step: 5,
+        title: "Repository Container Ready",
+        totalSteps: 5,
+        detail: `Successfully processed ${data.files.length} files.`,
+        sourceType: "github",
+        repoName: data.repo.fullRepoName,
+      });
+
+      setTimeout(() => {
+        setPackingProgress((prev) => ({ ...prev, active: false }));
+      }, 700);
+
       setRepoMeta(data.repo);
       setFiles(data.files);
       setActiveView("output");
     } catch (err: any) {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      clearTimeout(t4);
+      setPackingProgress((prev) => ({ ...prev, active: false }));
       setError(err.message || "Failed to connect or fetch repository.");
     } finally {
       setIsLoading(false);
@@ -85,9 +224,45 @@ export default function App() {
   const handleLocalZipSelect = async (file: File) => {
     setIsLoading(true);
     setError(null);
+    const cleanRepoName = file.name.replace(/\.zip$/i, "");
+
+    setPackingProgress({
+      active: true,
+      percent: 10,
+      title: "Reading Local ZIP Archive",
+      step: 1,
+      totalSteps: 5,
+      detail: `Loading '${file.name}' (${(file.size / 1024).toFixed(1)} KB)...`,
+      sourceType: "local",
+      repoName: cleanRepoName,
+    });
+
     try {
-      const processedFiles = await processZipFile(file, config);
-      const cleanRepoName = file.name.replace(/\.zip$/i, "");
+      const processedFiles = await processZipFile(file, config, (pct, step, detail) => {
+        setPackingProgress((prev) => ({
+          ...prev,
+          percent: pct,
+          step,
+          title: step === 2 ? "Decompressing Files" : step === 3 ? "Scanning Archive" : "Applying Filters",
+          detail,
+        }));
+      });
+
+      setPackingProgress({
+        active: true,
+        percent: 100,
+        step: 5,
+        title: "Repository Container Ready",
+        totalSteps: 5,
+        detail: `Successfully parsed ${processedFiles.length} files from archive.`,
+        sourceType: "local",
+        repoName: cleanRepoName,
+      });
+
+      setTimeout(() => {
+        setPackingProgress((prev) => ({ ...prev, active: false }));
+      }, 700);
+
       setRepoMeta({
         owner: "local",
         repo: cleanRepoName,
@@ -97,6 +272,7 @@ export default function App() {
       setFiles(processedFiles);
       setActiveView("output");
     } catch (err: any) {
+      setPackingProgress((prev) => ({ ...prev, active: false }));
       setError(`Error processing local ZIP: ${err.message || String(err)}`);
     } finally {
       setIsLoading(false);
@@ -159,6 +335,10 @@ export default function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onOpenHowItWorks={() => setIsHowItWorksOpen(true)}
+        user={user}
+        isGoogleLoading={isGoogleLoading}
+        onSignIn={handleGoogleSignIn}
+        onSignOut={handleGoogleSignOut}
       />
 
       {/* Main Container */}
@@ -173,6 +353,9 @@ export default function App() {
                 isLoading={isLoading}
                 error={error}
               />
+
+              {/* Active Packing Progress Bar */}
+              <PackingProgressBar progress={packingProgress} />
 
               <FilterSettings
                 config={config}
@@ -191,6 +374,7 @@ export default function App() {
                   onCopy={handleCopyContainer}
                   onDownloadTxt={handleDownloadTxt}
                   onDownloadScript={handleDownloadScript}
+                  onOpenSaveModal={() => setIsSaveModalOpen(true)}
                 />
 
                 {/* View Switcher for the Output Container vs File Tree */}
@@ -236,6 +420,7 @@ export default function App() {
                     containerText={packResult.containerText}
                     onCopy={handleCopyContainer}
                     onDownloadTxt={handleDownloadTxt}
+                    onOpenSaveModal={() => setIsSaveModalOpen(true)}
                   />
                 ) : (
                   <FileTreeView
@@ -274,6 +459,22 @@ export default function App() {
         file={previewFile}
         onClose={() => setPreviewFile(null)}
       />
+
+      {/* Save / Export Destination Modal */}
+      {packResult && repoMeta && (
+        <SaveDestinationModal
+          isOpen={isSaveModalOpen}
+          onClose={() => setIsSaveModalOpen(false)}
+          repoName={repoMeta.fullRepoName}
+          containerText={packResult.containerText}
+          asciiTree={packResult.asciiTree}
+          user={user}
+          accessToken={accessToken}
+          onSignIn={handleGoogleSignIn}
+          onSignOut={handleGoogleSignOut}
+          onDownloadTxt={handleDownloadTxt}
+        />
+      )}
 
       {/* How It Works & Unpack Instructions Modal */}
       <HowItWorksModal

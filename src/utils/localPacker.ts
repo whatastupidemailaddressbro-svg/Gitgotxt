@@ -33,10 +33,14 @@ function isBinaryUint8Array(uint8Array: Uint8Array): boolean {
 
 export async function processZipFile(
   file: File | Blob,
-  config: PackConfig
+  config: PackConfig,
+  onProgress?: (percent: number, step: number, detail: string) => void
 ): Promise<RepoFile[]> {
+  onProgress?.(15, 2, "Reading and decompressing archive...");
   const zip = await JSZip.loadAsync(file);
   const entries = Object.keys(zip.files);
+
+  onProgress?.(35, 3, `Scanning ${entries.length} archive entries...`);
 
   // Detect common root prefix
   let rootPrefix = "";
@@ -55,9 +59,15 @@ export async function processZipFile(
   }
 
   const results: RepoFile[] = [];
+  const validFiles = Object.entries(zip.files).filter(([, f]) => !f.dir);
+  let processedCount = 0;
 
-  for (const [entryPath, zipEntry] of Object.entries(zip.files)) {
-    if (zipEntry.dir) continue;
+  for (const [entryPath, zipEntry] of validFiles) {
+    processedCount++;
+    if (processedCount % 5 === 0 || processedCount === validFiles.length) {
+      const pct = 35 + Math.round((processedCount / validFiles.length) * 55);
+      onProgress?.(pct, 4, `Inspecting and filtering (${processedCount}/${validFiles.length}) files...`);
+    }
 
     let relPath = entryPath;
     if (rootPrefix && relPath.startsWith(rootPrefix)) {

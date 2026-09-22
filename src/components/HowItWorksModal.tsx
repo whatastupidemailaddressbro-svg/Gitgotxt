@@ -105,6 +105,20 @@ export const HowItWorksModal: React.FC<HowItWorksModalProps> = ({
                   Switch to the "Unpack Container" tab in this web app to drop the container and download as a <strong className="text-zinc-200">.ZIP</strong> archive. You can also use the standalone <strong className="text-emerald-400">offline/index.html</strong> (with persistent IndexedDB recovery and direct file download) or run <strong className="text-cyan-400">python3 offline/repopack.py</strong> with its interactive user menu.
                 </p>
               </div>
+
+              <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
+                <span className="font-semibold text-zinc-200 block mb-1">Google Workspace Cloud Destinations</span>
+                <p className="text-zinc-400">
+                  Click <strong className="text-emerald-400">"Save to Drive, Docs & Mail"</strong> after packing any repo to directly upload the container to your <strong className="text-zinc-200">Google Drive</strong>, generate a formatted collaborative <strong className="text-zinc-200">Google Doc</strong>, or send the container text file to your <strong className="text-zinc-200">Gmail</strong> inbox via official Google APIs.
+                </p>
+              </div>
+
+              <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
+                <span className="font-semibold text-zinc-200 block mb-1">Private Repositories & GitHub Token Storage</span>
+                <p className="text-zinc-400">
+                  Click <strong className="text-emerald-400">"Private Repo Token"</strong> to enter a personal access token (PAT) with <code className="text-emerald-400">repo</code> scope. Your token can be saved locally in your browser's persistent storage, allowing you to seamlessly fetch and pack private repositories and benefit from higher GitHub API rate limits.
+                </p>
+              </div>
             </div>
           </div>
         </div>
