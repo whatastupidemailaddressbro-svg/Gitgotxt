@@ -1,0 +1,6 @@
+{
+  "name": "RepoPack - GitHub to Text Container",
+  "description": "Convert public GitHub repositories into a single self-unpacking text container file with directory tree structure, strict file separators, and unpack scripts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
